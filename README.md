@@ -1,62 +1,89 @@
-# Project Manager
-ProjectManager is a project management system built with Laravel. It features users, project management, timesheet logging, dynamic attributes for projects, and flexible filtering. The project includes RESTful API endpoints with authentication using Laravel Passport.
+# Note: This code is not complete, so it will not run
 
-## Requirements
+# Order Tracker Documentation
 
-- PHP 7.4+
-- Laravel 8.x
-- MySQL
-- Composer
+## Master Models Required
 
-## Setup Instructions
+### Item Category
+- **Fields**: 
+  - `name`: The name of the item category.
+  - `id`: The unique identifier for the item category.
 
-1. Clone the repository:
-    ```bash
-    git clone https://github.com/mufeedbinismail/project-manager.git
-    cd project-manager
-    ```
+### Stock Item
+- **Fields**: 
+  - `name`: The name of the stock item.
+  - `id`: The unique identifier for the stock item.
+  - `price`: The price of the stock item.
+  - `category_id`: The identifier for the category to which the stock item belongs.
 
-2. Install dependencies:
-    ```bash
-    composer install
-    ```
+### Customer
+- **Fields**: 
+  - `name`: The name of the customer.
+  - `mobile`: The mobile number of the customer.
+  - `email`: The email address of the customer.
+  - `address`: The physical address of the customer.
 
-3. Configure write permissions for these directories (Linux/macOS):
-    - `bootstrap/cache`
-    - `storage`
-    ```bash
-    for i in bootstrap/cache storage; do
-        find "$i" -type d | xargs -I {} sudo chmod 775 "{}"
-        find "$i" -type d | xargs -I {} sudo chown $USER:www-data "{}"
-    done
-    ```
+### User
+- **Fields**: 
+  - `name`: The name of the user.
+  - `email`: The email address of the user.
+  - `password`: The password for the user account.
 
-4. Copy the `.env.example` file to `.env` and update your environment variables:
-    ```bash
-    cp .env.example .env
-    ```
+### Order
+- **Fields**: 
+  - `order_date`: The date when the order was placed.
+  - `customer_id`: The identifier for the customer who placed the order.
+  - `reference`: A unique reference for the order.
+  - `total`: The total amount for the order.
+  - `bookkeeping_fields`: Additional fields for bookkeeping purposes.
 
-5. Update the database connection configurations in the `.env` file:
-    ```
-    DB_CONNECTION=mysql
-    DB_HOST=127.0.0.1
-    DB_PORT=3306
-    DB_DATABASE=your_database_name
-    DB_USERNAME=your_database_user
-    DB_PASSWORD=your_database_password
-    ```
+### Order Items
+- **Fields**: 
+  - `order_id`: The identifier for the order to which the item belongs.
+  - `item_id`: The identifier for the item.
+  - `quantity`: The quantity of the item ordered.
+  - `unit_price`: The unit price of the item.
+  - `total`: The total price for the item (quantity * unit price).
 
-6. Generate the application key:
-    ```bash
-    php artisan key:generate
-    ```
+## Unique Reference Generation
 
-7. Run the database migrations and seeders:
-    ```bash
-    php artisan migrate --seed
-    ```
+A basic code model is already included within these changes.
 
-9. Start the development server:
-    ```bash
-    php artisan serve
-    ```
+### ReferencePattern
+- **Description**: A table that stores the pattern for the system type.
+
+### MetaReference
+- **Description**: This table holds the resolved patterns for any given context and their next sequence number.
+- **Functionality**: 
+  - Whenever an order is written, the `getNext` method is called in the MetaReference table with the persist option set to true.
+  - Since the call is happening inside a transaction, no other transaction can modify the record concurrently, ensuring the reference is not duplicated.
+  - Inside the `getNext` function, it parses the given context and creates a template. For example:
+    - If the date is 2025-01-01 and the pattern is `ORD/{YY}/{SEQ:3}`, the MetaReference table stores each unique template.
+    - It will have one entry for `ORD/25/{SEQ:3}` and one entry for `ORD/24/{SEQ:3}` for given two years, ensuring each unique pattern is only ever updated once concurrently.
+
+## Workflow
+
+### TaskType Table
+- **Description**: Task description like large order above 1000, and a class which implements the interface for workflow resolution.
+
+### Workflow Table
+- **Description**: A master table for generating unique IDs.
+
+### Workflow Definitions Table
+- **Description**: Holds the assigned user for each task at any given stage like level one or level two.
+
+### Workflow Interface
+- **Methods**: 
+  - `approve(TaskRecord $taskRecord): void`: Handles the approval of a task.
+  - `reject(TaskRecord $taskRecord): void`: Handles the rejection of a task.
+
+### Tasks & Task Transition Table
+- **Description**: Stores all the levels in the approval workflow and their current status whether approved or rejected, by whom and when.
+- **Functionality**: 
+  - When the user logs in, we can check the tasks table for pending transitions where action is not taken, which is assigned to the logged-in user to show him a list of tasks assigned to him, and he can take action based on his authority.
+  - Whenever an action is taken against a pending task, the task transition will happen, which will check if there are any additional levels in the approval hierarchy. If not, it calls the final approval method. If there is any additional level, then a new entry in the task transition table is added with the next assigned user.
+  - This approach handles multiple levels of approval as well as encapsulates the workflow engine and abstracts away the process from each individual task that may come in the future.
+
+## Order Processing
+
+Order processing is straightforward. When the user hits the controller for storing an order, we check if the order total is greater than the large amount threshold and initiate the workflow.
